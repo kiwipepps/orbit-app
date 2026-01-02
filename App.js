@@ -6,14 +6,14 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from './lib/supabase';
 
-// Import Screens
+// --- IMPORT YOUR REAL SCREENS HERE ---
 import LoginScreen from './screens/LoginScreen';
 import MyOrbitScreen from './screens/MyOrbitScreen';
 import AthleteDetailScreen from './screens/AthleteDetailScreen';
+import SearchScreen from './screens/SearchScreen';
 
-// Placeholders for tabs we haven't built yet
+// --- DELETE THE SEARCHSCREEN PLACEHOLDER BELOW ---
 const HomeScreen = () => <View style={{ flex: 1, backgroundColor: 'white' }} />;
-const SearchScreen = () => <View style={{ flex: 1, backgroundColor: 'white' }} />;
 const ProfileScreen = () => <View style={{ flex: 1, backgroundColor: 'white' }} />;
 
 const Stack = createNativeStackNavigator();
