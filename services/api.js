@@ -15,7 +15,7 @@ export const signOut = async () => {
 
 // --- DATA FETCHING ---
 
-// 1. Fetch all Athletes (Entities)
+// 1. Fetch ALL Athletes (For Search Screen)
 export const fetchAthletes = async () => {
     const { data, error } = await supabase
         .from('entities')
@@ -29,9 +29,27 @@ export const fetchAthletes = async () => {
     return data;
 };
 
-// 2. Fetch specific Athlete + Their Events
+// 2. Fetch ONLY Followed Athletes (For My Orbit Screen)
+export const fetchFollowedAthletes = async (userId) => {
+    // We select the 'entities' data referenced in the 'follows' table
+    const { data, error } = await supabase
+        .from('follows')
+        .select(`
+        entity_id,
+        entities (*)
+      `)
+        .eq('user_id', userId);
+
+    if (error) {
+        console.error('Error fetching followed athletes:', error);
+        return [];
+    }
+    // Flatten the result: Supabase returns { entities: {name: '...'} }, we just want { name: '...' }
+    return data.map(item => item.entities).filter(Boolean);
+};
+
+// 3. Fetch specific Athlete Profile
 export const fetchAthleteProfile = async (athleteId) => {
-    // A. Get basic details
     const { data: athlete, error: athleteError } = await supabase
         .from('entities')
         .select('*')
@@ -40,7 +58,6 @@ export const fetchAthleteProfile = async (athleteId) => {
 
     if (athleteError) throw athleteError;
 
-    // B. Get their events (using your JSONB result structure)
     const { data: events, error: eventsError } = await supabase
         .from('events')
         .select('id, title, start_time, result, category')
@@ -52,20 +69,19 @@ export const fetchAthleteProfile = async (athleteId) => {
     return { ...athlete, events };
 };
 
-// 3. Follow/Unfollow Logic
+// 4. Follow/Unfollow Logic
 export const toggleFollow = async (userId, entityId, isCurrentlyFollowing) => {
     if (isCurrentlyFollowing) {
-        // Unfollow
         const { error } = await supabase
             .from('follows')
             .delete()
-            .match({ user_id: userId, entity_id: entityId });
+            .eq('user_id', userId)
+            .eq('entity_id', entityId);
         return error ? false : true;
     } else {
-        // Follow
         const { error } = await supabase
             .from('follows')
-            .insert({ user_id: userId, entity_id: entityId });
+            .insert([{ user_id: userId, entity_id: entityId }]);
         return error ? false : true;
     }
 };
