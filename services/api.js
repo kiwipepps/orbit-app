@@ -96,3 +96,39 @@ export const toggleFollow = async (userId, entityId, isCurrentlyFollowing) => {
         return error ? false : true;
     }
 };
+
+// 5. Fetch Activity Feed (Events from followed athletes)
+export const fetchUserFeed = async (userId) => {
+    // A. Get list of IDs the user follows
+    const { data: follows, error: followError } = await supabase
+        .from('follows')
+        .select('entity_id')
+        .eq('user_id', userId);
+
+    if (followError) {
+        console.error('Error fetching follows for feed:', followError);
+        return [];
+    }
+
+    const followedIds = follows.map(f => f.entity_id);
+
+    if (followedIds.length === 0) return []; // User follows no one
+
+    // B. Get latest events for these IDs
+    // We also fetch the 'entities' data so we can show the athlete's Name/Photo on the card
+    const { data: events, error: eventError } = await supabase
+        .from('events')
+        .select(`
+            *,
+            entities (id, name, image_url, category, subcategory)
+        `)
+        .in('entity_id', followedIds)
+        .order('start_time', { ascending: false })
+        .limit(20); // Limit to 20 items for speed
+
+    if (eventError) {
+        console.error('Error fetching feed:', eventError);
+        return [];
+    }
+    return events;
+};

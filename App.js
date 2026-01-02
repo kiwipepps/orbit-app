@@ -11,9 +11,9 @@ import LoginScreen from './screens/LoginScreen';
 import MyOrbitScreen from './screens/MyOrbitScreen';
 import AthleteDetailScreen from './screens/AthleteDetailScreen';
 import SearchScreen from './screens/SearchScreen';
+import HomeScreen from './screens/HomeScreen';
 
 // --- DELETE THE SEARCHSCREEN PLACEHOLDER BELOW ---
-const HomeScreen = () => <View style={{ flex: 1, backgroundColor: 'white' }} />;
 const ProfileScreen = () => <View style={{ flex: 1, backgroundColor: 'white' }} />;
 
 const Stack = createNativeStackNavigator();
