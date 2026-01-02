@@ -15,23 +15,35 @@ export const signOut = async () => {
 
 // --- DATA FETCHING ---
 
-// 1. Fetch ALL Athletes (For Search Screen)
-export const fetchAthletes = async () => {
-    const { data, error } = await supabase
+// 1. Search Database (Updated with Category Filter)
+export const searchAthletes = async (query = '', category = 'all') => {
+    let dbQuery = supabase
         .from('entities')
         .select('*')
-        .order('name', { ascending: true });
+        .order('name', { ascending: true })
+        .limit(50);
+
+    // Filter by Text
+    if (query.length > 0) {
+        dbQuery = dbQuery.ilike('name', `%${query}%`);
+    }
+
+    // Filter by Category (using 'subcategory' column)
+    if (category !== 'all') {
+        dbQuery = dbQuery.ilike('subcategory', category);
+    }
+
+    const { data, error } = await dbQuery;
 
     if (error) {
-        console.error('Error fetching athletes:', error);
+        console.error('Error searching athletes:', error);
         return [];
     }
     return data;
 };
 
-// 2. Fetch ONLY Followed Athletes (For My Orbit Screen)
+// 2. Fetch ONLY Followed Athletes
 export const fetchFollowedAthletes = async (userId) => {
-    // We select the 'entities' data referenced in the 'follows' table
     const { data, error } = await supabase
         .from('follows')
         .select(`
@@ -44,7 +56,6 @@ export const fetchFollowedAthletes = async (userId) => {
         console.error('Error fetching followed athletes:', error);
         return [];
     }
-    // Flatten the result: Supabase returns { entities: {name: '...'} }, we just want { name: '...' }
     return data.map(item => item.entities).filter(Boolean);
 };
 

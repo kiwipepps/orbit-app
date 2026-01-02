@@ -2,31 +2,30 @@ import React, { useEffect, useState, useCallback } from 'react';
 import {
     View, Text, FlatList, Image, TouchableOpacity, TextInput,
     ScrollView, SafeAreaView, StyleSheet, ActivityIndicator,
-    Platform, StatusBar
+    Platform, StatusBar, Alert
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation, useFocusEffect } from '@react-navigation/native'; // Added useFocusEffect
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
-import { fetchFollowedAthletes } from '../services/api'; // IMPORTING THE NEW FUNCTION
+import { fetchFollowedAthletes, toggleFollow } from '../services/api';
 
+// --- UPDATED CATEGORIES ---
 const SPORTS_CATEGORIES = [
     { id: 'all', name: 'All', icon: 'apps' },
     { id: 'tennis', name: 'Tennis', icon: 'tennisball' },
+    { id: 'athletics', name: 'Athletics', icon: 'walk' }, // Updated
     { id: 'f1', name: 'F1', icon: 'car-sport' },
-    { id: 'basketball', name: 'Basketball', icon: 'basketball' },
 ];
 
 export default function MyOrbitScreen() {
     const navigation = useNavigation();
-
     const [myAthletes, setMyAthletes] = useState([]);
     const [filteredAthletes, setFilteredAthletes] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchText, setSearchText] = useState('');
     const [selectedCategory, setSelectedCategory] = useState('all');
+    const [currentUserId, setCurrentUserId] = useState(null);
 
-    // useFocusEffect re-runs this function every time you navigate back to this tab
-    // This ensures if you followed someone on the Search page, they appear here immediately
     useFocusEffect(
         useCallback(() => {
             loadData();
@@ -34,15 +33,12 @@ export default function MyOrbitScreen() {
     );
 
     const loadData = async () => {
-        // Don't set loading=true here if you want a smoother "silent update" experience
-        // But for now, let's keep it simple
         try {
             const { data: { user } } = await supabase.auth.getUser();
             if (user) {
-                // Fetch ONLY followed athletes
+                setCurrentUserId(user.id);
                 const data = await fetchFollowedAthletes(user.id);
                 setMyAthletes(data || []);
-                setFilteredAthletes(data || []);
             }
         } catch (error) {
             console.error(error);
@@ -51,24 +47,28 @@ export default function MyOrbitScreen() {
         }
     };
 
-    // Filter Logic (Runs locally on the "My Orbit" list)
+    // Filter Logic
     useEffect(() => {
         let result = myAthletes;
-
         if (selectedCategory !== 'all') {
-            result = result.filter(a =>
-                a.subcategory?.toLowerCase() === selectedCategory.toLowerCase()
-            );
+            result = result.filter(a => a.subcategory?.toLowerCase() === selectedCategory.toLowerCase());
         }
-
         if (searchText) {
-            result = result.filter(a =>
-                a.name.toLowerCase().includes(searchText.toLowerCase())
-            );
+            result = result.filter(a => a.name.toLowerCase().includes(searchText.toLowerCase()));
         }
-
         setFilteredAthletes(result);
     }, [searchText, selectedCategory, myAthletes]);
+
+    const handleUnfollow = async (athleteId) => {
+        const updatedList = myAthletes.filter(a => a.id !== athleteId);
+        setMyAthletes(updatedList); // Optimistic remove
+
+        const success = await toggleFollow(currentUserId, athleteId, true);
+        if (!success) {
+            Alert.alert("Error", "Could not unfollow.");
+            loadData();
+        }
+    };
 
     const handleSignOut = async () => {
         await supabase.auth.signOut();
@@ -82,15 +82,8 @@ export default function MyOrbitScreen() {
                 onPress={() => setSelectedCategory(item.id)}
                 style={[styles.categoryPill, isSelected && styles.categoryPillSelected]}
             >
-                <Ionicons
-                    name={item.icon}
-                    size={18}
-                    color={isSelected ? '#FFF' : '#667085'}
-                    style={{ marginRight: 6 }}
-                />
-                <Text style={[styles.categoryText, isSelected && styles.categoryTextSelected]}>
-                    {item.name}
-                </Text>
+                <Ionicons name={item.icon} size={18} color={isSelected ? '#FFF' : '#667085'} style={{ marginRight: 6 }} />
+                <Text style={[styles.categoryText, isSelected && styles.categoryTextSelected]}>{item.name}</Text>
             </TouchableOpacity>
         );
     };
@@ -100,15 +93,14 @@ export default function MyOrbitScreen() {
             style={styles.card}
             onPress={() => navigation.navigate('AthleteDetail', { athleteId: item.id })}
         >
-            <Image
-                source={{ uri: item.image_url || 'https://via.placeholder.com/150' }}
-                style={styles.avatar}
-            />
+            <Image source={{ uri: item.image_url || 'https://via.placeholder.com/150' }} style={styles.avatar} />
             <View style={styles.infoContainer}>
                 <Text style={styles.nameText}>{item.name}</Text>
                 <Text style={styles.sportText}>{item.subcategory || item.category || 'Sport'}</Text>
             </View>
-            <Ionicons name="chevron-forward" size={20} color="#98A2B3" />
+            <TouchableOpacity onPress={() => handleUnfollow(item.id)} style={{ padding: 8 }}>
+                <Ionicons name="star" size={24} color="#FEC84B" />
+            </TouchableOpacity>
         </TouchableOpacity>
     );
 
