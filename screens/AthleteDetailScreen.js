@@ -1,11 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
     View, Text, FlatList, ActivityIndicator, StyleSheet,
     SafeAreaView, Image, Platform, StatusBar
 } from 'react-native';
 import { fetchAthleteProfile } from '../services/api';
 
-// 1. CUSTOM LABELS (Update these to match your preference)
+// 1. CUSTOM LABELS
 const DISPLAY_NAMES = {
     "place_rank": "Place",
     "rank": "Place",
@@ -13,6 +13,9 @@ const DISPLAY_NAMES = {
     "mark": "Mark",
     "discipline_clean": "Event",
     "event": "Event",
+    "round_label": "Round", // Fixes "Round Name" -> "Round"
+    "round": "Round",
+    "phase": "Round",
     "wind": "Wind",
     "venue": "Location",
     "date": "Date"
@@ -38,22 +41,57 @@ export default function AthleteDetailScreen({ route }) {
         }
     };
 
-    // Helper: Formats keys (e.g. "place_rank" -> "Place")
+    // --- SORTING LOGIC ---
+    const sortedEvents = useMemo(() => {
+        if (!profile?.events) return [];
+
+        // Helper to score rounds (Higher number = Higher priority)
+        const getRoundScore = (event) => {
+            // Combine title and result data to find the round name
+            const text = (event.title + " " + JSON.stringify(event.result)).toLowerCase();
+
+            if (text.includes('final') && !text.includes('semi')) return 100; // Final (Top)
+            if (text.includes('semi')) return 90;   // Semi Final
+            if (text.includes('quarter')) return 80; // Quarter Final
+            if (text.includes('round 3')) return 70;
+            if (text.includes('round 2')) return 60;
+            if (text.includes('round 1')) return 50;
+            if (text.includes('qual')) return 40;   // Qualification
+            if (text.includes('heat')) return 30;   // Heats
+            return 0; // Unknown
+        };
+
+        return [...profile.events].sort((a, b) => {
+            // 1. Sort by Date (Desc)
+            const dateA = new Date(a.start_time).getTime();
+            const dateB = new Date(b.start_time).getTime();
+            if (dateA !== dateB) return dateB - dateA;
+
+            // 2. If same Date, Sort by Round Priority (Desc)
+            return getRoundScore(b) - getRoundScore(a);
+        });
+    }, [profile]);
+
+    // --- FORMATTERS ---
+
     const formatKey = (key) => {
         if (DISPLAY_NAMES[key]) return DISPLAY_NAMES[key];
-        // Fallback: Capitalize first letter
         return key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
     };
 
-    // Helper: Formats values (e.g. "3." -> "3rd")
     const formatValue = (key, value) => {
         if (!value) return '-';
 
-        // Ordinal Logic (1st, 2nd, 3rd)
-        // Checks if key looks like a rank/place
+        // A. Ordinal Logic for Ranks (1st, 2nd)
         if (key.toLowerCase().includes('rank') || key.toLowerCase().includes('place')) {
             const num = parseInt(String(value).replace(/[^0-9]/g, ''), 10);
             if (!isNaN(num)) return getOrdinal(num);
+        }
+
+        // B. Text Cleanup (Fixes "100m_Hurdles" -> "100m Hurdles")
+        if (typeof value === 'string') {
+            // Replaces underscores with space & capitalizes words
+            return value.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
         }
 
         return String(value);
@@ -65,14 +103,13 @@ export default function AthleteDetailScreen({ route }) {
         return n + (s[(v - 20) % 10] || s[v] || s[0]);
     };
 
-    // --- NEW SORTING LOGIC ---
-    // Instead of looking for exact keys, we score them by keyword.
+    // Sorting the stats rows (Place -> Mark -> Event)
     const getSortPriority = (key) => {
         const k = key.toLowerCase();
-        if (k.includes('place') || k.includes('rank') || k.includes('pos')) return 1; // Top Priority
-        if (k.includes('mark') || k.includes('result') || k.includes('time')) return 2; // Second Priority
-        if (k.includes('discipline') || k.includes('event')) return 3; // Third Priority
-        return 4; // Everything else
+        if (k.includes('place') || k.includes('rank') || k.includes('pos')) return 1;
+        if (k.includes('mark') || k.includes('result') || k.includes('time')) return 2;
+        if (k.includes('discipline') || k.includes('event')) return 3;
+        return 4;
     };
 
     const getSortedEntries = (resultObj) => {
@@ -80,11 +117,7 @@ export default function AthleteDetailScreen({ route }) {
         return Object.entries(resultObj).sort(([keyA], [keyB]) => {
             const priorityA = getSortPriority(keyA);
             const priorityB = getSortPriority(keyB);
-
-            if (priorityA !== priorityB) {
-                return priorityA - priorityB; // Lower number = Higher up
-            }
-            // Tie-breaker: Alphabetical
+            if (priorityA !== priorityB) return priorityA - priorityB;
             return keyA.localeCompare(keyB);
         });
     };
@@ -93,7 +126,6 @@ export default function AthleteDetailScreen({ route }) {
 
     return (
         <SafeAreaView style={styles.container}>
-            {/* Header */}
             <View style={styles.header}>
                 <Image
                     source={{ uri: profile?.image_url || 'https://via.placeholder.com/150' }}
@@ -107,7 +139,7 @@ export default function AthleteDetailScreen({ route }) {
                 <Text style={styles.sectionTitle}>Recent Results</Text>
 
                 <FlatList
-                    data={profile?.events || []}
+                    data={sortedEvents} // Using the Sorted List
                     keyExtractor={(item) => item.id}
                     contentContainerStyle={{ paddingBottom: 20 }}
                     renderItem={({ item }) => (

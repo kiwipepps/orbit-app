@@ -6,20 +6,18 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from './lib/supabase';
 
-// --- IMPORT YOUR REAL SCREENS HERE ---
+// --- SCREENS ---
 import LoginScreen from './screens/LoginScreen';
-import MyOrbitScreen from './screens/MyOrbitScreen';
-import AthleteDetailScreen from './screens/AthleteDetailScreen';
-import SearchScreen from './screens/SearchScreen';
 import HomeScreen from './screens/HomeScreen';
-
-// --- DELETE THE SEARCHSCREEN PLACEHOLDER BELOW ---
-const ProfileScreen = () => <View style={{ flex: 1, backgroundColor: 'white' }} />;
+import SearchScreen from './screens/SearchScreen';
+import MyOrbitScreen from './screens/MyOrbitScreen';
+import ProfileScreen from './screens/ProfileScreen'; // 👈 NEW IMPORT
+import AthleteDetailScreen from './screens/AthleteDetailScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
-// 1. The Tab Navigator (Main App)
+// 1. Main App Tabs
 function MainTabs() {
   return (
     <Tab.Navigator
@@ -45,19 +43,17 @@ function MainTabs() {
   );
 }
 
-// 2. The Root Navigator (Handles Auth & Drill-down navigation)
+// 2. Root Navigator
 export default function App() {
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setLoading(false);
     });
 
-    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setLoading(false);
@@ -78,7 +74,6 @@ export default function App() {
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {session && session.user ? (
-          // IF LOGGED IN
           <>
             <Stack.Screen name="Main" component={MainTabs} />
             <Stack.Screen
@@ -88,7 +83,6 @@ export default function App() {
             />
           </>
         ) : (
-          // IF LOGGED OUT
           <Stack.Screen name="Login" component={LoginScreen} />
         )}
       </Stack.Navigator>

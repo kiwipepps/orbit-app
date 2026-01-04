@@ -9,11 +9,10 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { fetchFollowedAthletes, toggleFollow } from '../services/api';
 
-// --- UPDATED CATEGORIES ---
 const SPORTS_CATEGORIES = [
     { id: 'all', name: 'All', icon: 'apps' },
     { id: 'tennis', name: 'Tennis', icon: 'tennisball' },
-    { id: 'athletics', name: 'Athletics', icon: 'walk' }, // Updated
+    { id: 'athletics', name: 'Athletics', icon: 'walk' },
     { id: 'f1', name: 'F1', icon: 'car-sport' },
 ];
 
@@ -47,7 +46,6 @@ export default function MyOrbitScreen() {
         }
     };
 
-    // Filter Logic
     useEffect(() => {
         let result = myAthletes;
         if (selectedCategory !== 'all') {
@@ -61,17 +59,12 @@ export default function MyOrbitScreen() {
 
     const handleUnfollow = async (athleteId) => {
         const updatedList = myAthletes.filter(a => a.id !== athleteId);
-        setMyAthletes(updatedList); // Optimistic remove
-
+        setMyAthletes(updatedList);
         const success = await toggleFollow(currentUserId, athleteId, true);
         if (!success) {
             Alert.alert("Error", "Could not unfollow.");
             loadData();
         }
-    };
-
-    const handleSignOut = async () => {
-        await supabase.auth.signOut();
     };
 
     const renderCategoryItem = (item) => {
@@ -108,9 +101,7 @@ export default function MyOrbitScreen() {
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
                 <Text style={styles.headerTitle}>My Orbit</Text>
-                <TouchableOpacity onPress={handleSignOut} style={styles.signOutButton}>
-                    <Ionicons name="log-out-outline" size={24} color="white" />
-                </TouchableOpacity>
+                {/* 🗑️ LOG OUT BUTTON REMOVED FROM HERE */}
             </View>
 
             <View style={styles.filterSection}>
@@ -155,7 +146,6 @@ const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#FFFFFF' },
     header: { backgroundColor: '#0F172A', height: 60, justifyContent: 'center', alignItems: 'center', paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0 },
     headerTitle: { color: 'white', fontSize: 18, fontWeight: '600' },
-    signOutButton: { position: 'absolute', right: 20, top: 18 },
     filterSection: { padding: 16, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#F2F4F7' },
     searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#D0D5DD', borderRadius: 8, paddingHorizontal: 12, height: 44, marginBottom: 12 },
     searchInput: { flex: 1, fontSize: 16, color: '#101828' },
