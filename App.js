@@ -11,8 +11,9 @@ import LoginScreen from './screens/LoginScreen';
 import HomeScreen from './screens/HomeScreen';
 import SearchScreen from './screens/SearchScreen';
 import MyOrbitScreen from './screens/MyOrbitScreen';
-import ProfileScreen from './screens/ProfileScreen'; // 👈 NEW IMPORT
+import ProfileScreen from './screens/ProfileScreen';
 import AthleteDetailScreen from './screens/AthleteDetailScreen';
+import EventDetailScreen from './screens/EventDetailScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -80,6 +81,11 @@ export default function App() {
               name="AthleteDetail"
               component={AthleteDetailScreen}
               options={{ headerShown: true, title: 'Athlete Profile' }}
+            />
+            <Stack.Screen
+              name="EventDetail"
+              component={EventDetailScreen}
+              options={{ headerShown: true, title: 'Event Results' }}
             />
           </>
         ) : (
