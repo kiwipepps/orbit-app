@@ -1,9 +1,10 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import {
     View, Text, FlatList, ActivityIndicator, StyleSheet,
-    SafeAreaView, Image, TouchableOpacity // 👈 Added TouchableOpacity
+    SafeAreaView, TouchableOpacity, Platform, StatusBar
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native'; // 👈 Added navigation hook
+import { Image } from 'expo-image'; // 👈 IMPORT FROM EXPO-IMAGE
+import { useNavigation } from '@react-navigation/native';
 import { fetchAthleteProfile } from '../services/api';
 
 // 1. CUSTOM LABELS
@@ -15,12 +16,11 @@ const DISPLAY_NAMES = {
     "wind": "Wind", "venue": "Location", "date": "Date"
 };
 
-// Keys to hide
 const HIDDEN_FIELDS = ['id', 'hidden_id', 'event_name_raw', 'athlete_id', 'entity_id', 'event_key'];
 
 export default function AthleteDetailScreen({ route }) {
     const { athleteId } = route.params;
-    const navigation = useNavigation(); // 👈 Initialize navigation
+    const navigation = useNavigation();
     const [profile, setProfile] = useState(null);
     const [loading, setLoading] = useState(true);
 
@@ -39,7 +39,7 @@ export default function AthleteDetailScreen({ route }) {
         }
     };
 
-    // --- SORTING EVENTS (Date -> Round Priority) ---
+    // --- SORTING LOGIC ---
     const sortedEvents = useMemo(() => {
         if (!profile?.events) return [];
         const getRoundScore = (event) => {
@@ -73,13 +73,10 @@ export default function AthleteDetailScreen({ route }) {
             const num = parseInt(String(value).replace(/[^0-9]/g, ''), 10);
             if (!isNaN(num)) return getOrdinal(num);
         }
-        if (typeof value === 'string') {
-            return value.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-        }
+        if (typeof value === 'string') return value.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
         return String(value);
     };
 
-    // --- HELPER: Find the 'Place' to show it big ---
     const getPlaceInfo = (resultObj) => {
         if (!resultObj) return null;
         const placeKey = Object.keys(resultObj).find(k =>
@@ -89,24 +86,17 @@ export default function AthleteDetailScreen({ route }) {
         return null;
     };
 
-    // --- STATS SORT ORDER ---
-    const getSortPriority = (key) => {
-        const k = key.toLowerCase();
-        if (k.includes('discipline') || k.includes('event')) return 1;
-        if (k.includes('mark') || k.includes('time') || k.includes('result')) return 2;
-        if (k.includes('round') || k.includes('heat') || k.includes('semi') || k.includes('final') || k.includes('phase')) return 3;
-        if (k.includes('wind')) return 4;
-        return 5;
-    };
-
     const getSortedEntries = (resultObj) => {
         if (!resultObj) return [];
-        return Object.entries(resultObj).sort(([a], [b]) => {
-            const priorityA = getSortPriority(a);
-            const priorityB = getSortPriority(b);
-            if (priorityA !== priorityB) return priorityA - priorityB;
-            return a.localeCompare(b);
-        });
+        const getPriority = (k) => {
+            const key = k.toLowerCase();
+            if (key.includes('discipline') || key.includes('event')) return 1;
+            if (key.includes('mark') || key.includes('time')) return 2;
+            if (key.includes('round')) return 3;
+            if (key.includes('wind')) return 4;
+            return 5;
+        };
+        return Object.entries(resultObj).sort(([a], [b]) => getPriority(a) - getPriority(b));
     };
 
     if (loading) return <ActivityIndicator style={{ marginTop: 50 }} size="large" color="#7F56D9" />;
@@ -114,7 +104,14 @@ export default function AthleteDetailScreen({ route }) {
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
-                <Image source={{ uri: profile?.image_url || 'https://via.placeholder.com/150' }} style={styles.avatar} />
+                {/* 🟢 UPDATED IMAGE COMPONENT */}
+                <Image
+                    source={{ uri: profile?.image_url || 'https://via.placeholder.com/150' }}
+                    style={styles.avatar}
+                    contentFit="cover"            // Replaces resizeMode="cover"
+                    contentPosition="top center"  // 👈 FIX: Aligns image to the top (Head)
+                    transition={500}              // Fade in effect
+                />
                 <Text style={styles.name}>{profile?.name}</Text>
                 <Text style={styles.category}>{profile?.subcategory || profile?.category || 'Athlete'}</Text>
             </View>
@@ -129,7 +126,6 @@ export default function AthleteDetailScreen({ route }) {
                     renderItem={({ item }) => {
                         const placeInfo = getPlaceInfo(item.result);
 
-                        // 🟢 GO TO EVENT FUNCTION
                         const goToEvent = () => navigation.push('EventDetail', {
                             title: item.title,
                             eventKey: item.event_key,
@@ -138,7 +134,6 @@ export default function AthleteDetailScreen({ route }) {
 
                         return (
                             <View style={styles.eventCard}>
-                                {/* 🟢 Clickable Header */}
                                 <TouchableOpacity style={styles.cardHeader} onPress={goToEvent}>
                                     <View style={styles.headerLeft}>
                                         <Text style={styles.eventTitle}>{item.title}</Text>
@@ -153,12 +148,10 @@ export default function AthleteDetailScreen({ route }) {
 
                                 <View style={styles.divider} />
 
-                                {/* 🟢 Clickable Stats Body */}
                                 <TouchableOpacity style={styles.statsContainer} onPress={goToEvent}>
                                     {item.result && typeof item.result === 'object' ? (
                                         getSortedEntries(item.result).map(([key, value]) => {
                                             if (HIDDEN_FIELDS.includes(key) || key === placeInfo?.key) return null;
-
                                             return (
                                                 <View key={key} style={styles.statRow}>
                                                     <Text style={styles.statLabel}>{formatKey(key)}</Text>
@@ -182,33 +175,23 @@ export default function AthleteDetailScreen({ route }) {
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#FFFFFF' },
     header: { alignItems: 'center', padding: 24, backgroundColor: '#F9FAFB', borderBottomWidth: 1, borderColor: '#EAECF0' },
-    avatar: { width: 100, height: 100, borderRadius: 50, marginBottom: 16, borderWidth: 3, borderColor: '#FFFFFF', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 },
+    avatar: {
+        width: 100, height: 100, borderRadius: 50, marginBottom: 16,
+        borderWidth: 3, borderColor: '#FFFFFF',
+        shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4,
+        backgroundColor: '#F2F4F7'
+    },
     name: { fontSize: 24, fontWeight: '700', color: '#101828', textAlign: 'center' },
     category: { color: '#7F56D9', fontSize: 16, fontWeight: '500', marginTop: 4 },
     content: { flex: 1, paddingHorizontal: 16 },
     sectionTitle: { fontSize: 18, fontWeight: '600', color: '#101828', marginTop: 20, marginBottom: 12 },
-
-    eventCard: {
-        backgroundColor: '#FFFFFF', borderRadius: 12, borderWidth: 1, borderColor: '#EAECF0', marginBottom: 16,
-        shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 2,
-    },
-
-    cardHeader: {
-        padding: 16, flexDirection: 'row',
-        justifyContent: 'space-between', alignItems: 'center',
-        backgroundColor: '#F9FAFB', borderTopLeftRadius: 12, borderTopRightRadius: 12,
-    },
+    eventCard: { backgroundColor: '#FFFFFF', borderRadius: 12, borderWidth: 1, borderColor: '#EAECF0', marginBottom: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 2 },
+    cardHeader: { padding: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#F9FAFB', borderTopLeftRadius: 12, borderTopRightRadius: 12 },
     headerLeft: { flex: 1, marginRight: 10 },
     headerRight: { justifyContent: 'center', alignItems: 'flex-end' },
-
     eventTitle: { fontSize: 16, fontWeight: '700', color: '#101828' },
     eventDate: { fontSize: 14, color: '#667085', marginTop: 2 },
-
-    bigPlaceText: {
-        fontSize: 24, fontWeight: '800', color: '#7F56D9',
-        textAlign: 'right'
-    },
-
+    bigPlaceText: { fontSize: 24, fontWeight: '800', color: '#7F56D9', textAlign: 'right' },
     divider: { height: 1, backgroundColor: '#EAECF0' },
     statsContainer: { padding: 16 },
     statRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },

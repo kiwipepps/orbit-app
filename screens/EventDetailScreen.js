@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import {
     View, Text, FlatList, ActivityIndicator, StyleSheet,
-    SafeAreaView, Image, TouchableOpacity
+    SafeAreaView, TouchableOpacity
 } from 'react-native';
+import { Image } from 'expo-image'; // 👈 IMPORT FROM EXPO-IMAGE
 import { useNavigation } from '@react-navigation/native';
 import { fetchEventResults } from '../services/api';
 
@@ -18,7 +19,6 @@ export default function EventDetailScreen({ route }) {
 
     const loadResults = async () => {
         const data = await fetchEventResults(title, eventKey);
-        // Sort data by Rank (1st, 2nd, 3rd...)
         const sorted = data.sort((a, b) => getRank(a.result) - getRank(b.result));
         setResults(sorted);
         setLoading(false);
@@ -66,14 +66,17 @@ export default function EventDetailScreen({ route }) {
                 </View>
 
                 {/* Athlete Info */}
+                {/* 🟢 UPDATED IMAGE COMPONENT */}
                 <Image
                     source={{ uri: item.entities?.image_url || 'https://via.placeholder.com/50' }}
                     style={styles.avatar}
+                    contentFit="cover"
+                    contentPosition="top center" // 👈 Keeps faces visible in small circles too
+                    transition={200}
                 />
 
                 <View style={styles.infoCol}>
                     <Text style={styles.nameText}>{item.entities?.name}</Text>
-                    {/* 🟢 NEW: Display Nationality */}
                     {item.entities?.nationality && (
                         <Text style={styles.subText}>{item.entities.nationality}</Text>
                     )}
@@ -119,13 +122,13 @@ const styles = StyleSheet.create({
     rankCol: { width: 50, alignItems: 'center' },
     rankText: { fontSize: 16, fontWeight: '600', color: '#667085' },
     topRank: { color: '#7F56D9', fontWeight: '800' },
-    avatar: { width: 40, height: 40, borderRadius: 20, marginRight: 12, backgroundColor: '#DDD' },
-
-    // Updated info column to support two lines again
+    avatar: {
+        width: 40, height: 40, borderRadius: 20, marginRight: 12,
+        backgroundColor: '#DDD'
+    },
     infoCol: { flex: 1, justifyContent: 'center' },
     nameText: { fontSize: 16, fontWeight: '600', color: '#101828' },
-    subText: { fontSize: 13, color: '#667085', marginTop: 2 }, // Added marginTop for spacing
-
+    subText: { fontSize: 13, color: '#667085', marginTop: 2 },
     markCol: { minWidth: 60, alignItems: 'flex-end' },
     markText: { fontSize: 16, fontWeight: '700', color: '#101828' }
 });

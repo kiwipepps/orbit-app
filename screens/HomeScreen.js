@@ -1,8 +1,9 @@
 import React, { useState, useCallback } from 'react';
 import {
-    View, Text, FlatList, Image, StyleSheet, ActivityIndicator,
+    View, Text, FlatList, StyleSheet, ActivityIndicator,
     SafeAreaView, TouchableOpacity, Platform, StatusBar
 } from 'react-native';
+import { Image } from 'expo-image'; // 👈 IMPORT FROM EXPO-IMAGE
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { fetchUserFeed } from '../services/api';
@@ -87,13 +88,9 @@ export default function HomeScreen() {
         });
     };
 
-    // --- RENDER ITEM ---
     const renderFeedItem = ({ item }) => {
         const placeInfo = getPlaceInfo(item.result);
-
         const goToAthlete = () => navigation.navigate('AthleteDetail', { athleteId: item.entity_id });
-
-        // 🟢 UPDATED: Pass 'eventKey' and 'title' for the specific race results
         const goToEvent = () => navigation.navigate('EventDetail', {
             title: item.title,
             eventKey: item.event_key,
@@ -105,7 +102,13 @@ export default function HomeScreen() {
                 <View style={styles.cardTop}>
                     <View style={styles.headerLeft}>
                         <TouchableOpacity onPress={goToAthlete}>
-                            <Image source={{ uri: item.entities?.image_url || 'https://via.placeholder.com/50' }} style={styles.avatarSmall} />
+                            {/* 🟢 UPDATED IMAGE COMPONENT */}
+                            <Image
+                                source={{ uri: item.entities?.image_url || 'https://via.placeholder.com/50' }}
+                                style={styles.avatarSmall}
+                                contentFit="cover"
+                                contentPosition="top center" // 👈 Aligns small avatars too
+                            />
                         </TouchableOpacity>
 
                         <View style={{ flex: 1 }}>
@@ -162,6 +165,15 @@ export default function HomeScreen() {
                     renderItem={renderFeedItem}
                     keyExtractor={item => item.id}
                     contentContainerStyle={{ padding: 16 }}
+                    ListEmptyComponent={
+                        <View style={styles.emptyState}>
+                            <Text style={styles.emptyText}>Your feed is empty.</Text>
+                            <Text style={styles.emptySubText}>Follow athletes to see their latest results here!</Text>
+                            <TouchableOpacity onPress={() => navigation.navigate('Search')}>
+                                <Text style={styles.linkText}>Find Athletes</Text>
+                            </TouchableOpacity>
+                        </View>
+                    }
                 />
             )}
         </SafeAreaView>
@@ -176,7 +188,9 @@ const styles = StyleSheet.create({
     cardTop: { padding: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#F9FAFB', borderTopLeftRadius: 12, borderTopRightRadius: 12 },
     headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8 },
     headerRight: { justifyContent: 'center' },
-    avatarSmall: { width: 40, height: 40, borderRadius: 20, marginRight: 12, backgroundColor: '#DDD' },
+    avatarSmall: {
+        width: 40, height: 40, borderRadius: 20, marginRight: 12, backgroundColor: '#DDD'
+    },
     athleteName: { fontSize: 16, fontWeight: '700', color: '#101828' },
     eventMeta: { fontSize: 12, color: '#667085', marginTop: 2 },
     bigPlaceText: { fontSize: 20, fontWeight: '800', color: '#7F56D9', textAlign: 'right' },
@@ -184,5 +198,9 @@ const styles = StyleSheet.create({
     statsContainer: { padding: 16 },
     statRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
     statLabel: { fontSize: 14, color: '#667085', fontWeight: '500' },
-    statValue: { fontSize: 14, color: '#101828', fontWeight: '600' }
+    statValue: { fontSize: 14, color: '#101828', fontWeight: '600' },
+    emptyState: { alignItems: 'center', marginTop: 60, paddingHorizontal: 40 },
+    emptyText: { fontSize: 18, fontWeight: '600', color: '#101828' },
+    emptySubText: { textAlign: 'center', color: '#667085', marginVertical: 8 },
+    linkText: { color: '#7F56D9', fontWeight: '700', fontSize: 16, marginTop: 8 }
 });

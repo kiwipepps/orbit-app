@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
-    View, Text, FlatList, Image, TouchableOpacity, TextInput,
+    View, Text, FlatList, TouchableOpacity, TextInput,
     StyleSheet, ActivityIndicator, SafeAreaView, Platform, StatusBar, Alert, ScrollView
 } from 'react-native';
+import { Image } from 'expo-image'; // 👈 IMPORT FROM EXPO-IMAGE
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
@@ -12,7 +13,7 @@ import { searchAthletes, fetchFollowedAthletes, toggleFollow } from '../services
 const SPORTS_CATEGORIES = [
     { id: 'all', name: 'All', icon: 'apps' },
     { id: 'tennis', name: 'Tennis', icon: 'tennisball' },
-    { id: 'athletics', name: 'Athletics', icon: 'walk' }, // Use 'walk' or 'fitness' if 'running' isn't available in Ionicons
+    { id: 'athletics', name: 'Athletics', icon: 'walk' },
     { id: 'f1', name: 'F1', icon: 'car-sport' },
 ];
 
@@ -103,7 +104,14 @@ export default function SearchScreen() {
                 style={styles.card}
                 onPress={() => navigation.navigate('AthleteDetail', { athleteId: item.id })}
             >
-                <Image source={{ uri: item.image_url || 'https://via.placeholder.com/150' }} style={styles.avatar} />
+                {/* 🟢 UPDATED IMAGE COMPONENT */}
+                <Image
+                    source={{ uri: item.image_url || 'https://via.placeholder.com/150' }}
+                    style={styles.avatar}
+                    contentFit="cover"
+                    contentPosition="top center" // 👈 Keeps faces visible
+                    transition={200}
+                />
                 <View style={styles.infoContainer}>
                     <Text style={styles.nameText}>{item.name}</Text>
                     <Text style={styles.sportText}>{item.subcategory || item.category || 'Athlete'}</Text>
@@ -172,8 +180,6 @@ const styles = StyleSheet.create({
     sportText: { color: '#7F56D9', fontSize: 14, marginTop: 2 },
     followButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#F9F5FF', borderWidth: 1, borderColor: '#E9D7FE', justifyContent: 'center', alignItems: 'center' },
     followingButton: { backgroundColor: '#7F56D9', borderColor: '#7F56D9' },
-
-    // New Styles for Pills
     categoryPill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: '#F2F4F7', marginRight: 8 },
     categoryPillSelected: { backgroundColor: '#7F56D9' },
     categoryText: { fontSize: 14, fontWeight: '500', color: '#344054' },
