@@ -1,6 +1,8 @@
+// services/api.js
+
 import { supabase } from '../lib/supabase';
 
-// --- AUTH ---
+// ... (Authentication functions remain the same) ...
 export const signIn = async (email, password) => {
     return await supabase.auth.signInWithPassword({ email, password });
 };
@@ -15,13 +17,16 @@ export const signOut = async () => {
 
 // --- DATA FETCHING ---
 
-// 1. Search Database
-export const searchAthletes = async (query = '', category = 'all') => {
+// 1. Search Database (🟢 UPDATED FOR PAGINATION)
+export const searchAthletes = async (query = '', category = 'all', page = 0, limit = 20) => {
+    const from = page * limit;
+    const to = from + limit - 1;
+
     let dbQuery = supabase
         .from('entities')
         .select('*')
         .order('name', { ascending: true })
-        .limit(50);
+        .range(from, to); // 👈 Fetch specific range
 
     if (query.length > 0) dbQuery = dbQuery.ilike('name', `%${query}%`);
     if (category !== 'all') dbQuery = dbQuery.ilike('subcategory', category);
@@ -34,7 +39,7 @@ export const searchAthletes = async (query = '', category = 'all') => {
     return data;
 };
 
-// 2. Fetch Followed Athletes
+// ... (Rest of the file remains exactly the same: fetchFollowedAthletes, fetchAthleteProfile, etc.) ...
 export const fetchFollowedAthletes = async (userId) => {
     const { data, error } = await supabase
         .from('follows')
@@ -48,7 +53,6 @@ export const fetchFollowedAthletes = async (userId) => {
     return data.map(item => item.entities).filter(Boolean);
 };
 
-// 3. Fetch Athlete Profile
 export const fetchAthleteProfile = async (athleteId) => {
     const { data: athlete, error: athleteError } = await supabase
         .from('entities')
@@ -60,7 +64,7 @@ export const fetchAthleteProfile = async (athleteId) => {
 
     const { data: events, error: eventsError } = await supabase
         .from('events')
-        .select('*') // 'event_key' comes from here
+        .select('*')
         .eq('entity_id', athleteId)
         .order('start_time', { ascending: false });
 
@@ -69,7 +73,6 @@ export const fetchAthleteProfile = async (athleteId) => {
     return { ...athlete, events };
 };
 
-// 4. Toggle Follow
 export const toggleFollow = async (userId, entityId, isCurrentlyFollowing) => {
     if (isCurrentlyFollowing) {
         const { error } = await supabase.from('follows').delete().eq('user_id', userId).eq('entity_id', entityId);
@@ -80,7 +83,6 @@ export const toggleFollow = async (userId, entityId, isCurrentlyFollowing) => {
     }
 };
 
-// 5. Fetch Activity Feed
 export const fetchUserFeed = async (userId) => {
     const { data: follows, error: followError } = await supabase
         .from('follows')
@@ -102,7 +104,6 @@ export const fetchUserFeed = async (userId) => {
     return events;
 };
 
-// 6. Fetch Full Results for a Specific Event
 export const fetchEventResults = async (title, eventKey) => {
     const { data, error } = await supabase
         .from('events')

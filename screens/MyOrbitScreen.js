@@ -1,14 +1,15 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
     View, Text, FlatList, TouchableOpacity, TextInput,
-    ScrollView, SafeAreaView, StyleSheet, ActivityIndicator,
-    Platform, StatusBar, Alert
+    ScrollView, StyleSheet, ActivityIndicator, Alert
 } from 'react-native';
-import { Image } from 'expo-image'; // 👈 IMPORT FROM EXPO-IMAGE
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { fetchFollowedAthletes, toggleFollow } from '../services/api';
+import { getFlagEmoji } from '../utils/flagHelper';
 
 const SPORTS_CATEGORIES = [
     { id: 'all', name: 'All', icon: 'apps' },
@@ -16,6 +17,14 @@ const SPORTS_CATEGORIES = [
     { id: 'athletics', name: 'Athletics', icon: 'walk' },
     { id: 'f1', name: 'F1', icon: 'car-sport' },
 ];
+
+// 🟢 HELPER
+const getInitials = (name) => {
+    if (!name) return '';
+    const parts = name.trim().split(' ');
+    if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+    return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+};
 
 export default function MyOrbitScreen() {
     const navigation = useNavigation();
@@ -26,11 +35,7 @@ export default function MyOrbitScreen() {
     const [selectedCategory, setSelectedCategory] = useState('all');
     const [currentUserId, setCurrentUserId] = useState(null);
 
-    useFocusEffect(
-        useCallback(() => {
-            loadData();
-        }, [])
-    );
+    useFocusEffect(useCallback(() => { loadData(); }, []));
 
     const loadData = async () => {
         try {
@@ -40,40 +45,25 @@ export default function MyOrbitScreen() {
                 const data = await fetchFollowedAthletes(user.id);
                 setMyAthletes(data || []);
             }
-        } catch (error) {
-            console.error(error);
-        } finally {
-            setLoading(false);
-        }
+        } catch (error) { console.error(error); }
+        finally { setLoading(false); }
     };
 
-    // Filter Logic
     useEffect(() => {
         let result = myAthletes;
-        if (selectedCategory !== 'all') {
-            result = result.filter(a => a.subcategory?.toLowerCase() === selectedCategory.toLowerCase());
-        }
-        if (searchText) {
-            result = result.filter(a => a.name.toLowerCase().includes(searchText.toLowerCase()));
-        }
+        if (selectedCategory !== 'all') result = result.filter(a => a.subcategory?.toLowerCase() === selectedCategory.toLowerCase());
+        if (searchText) result = result.filter(a => a.name.toLowerCase().includes(searchText.toLowerCase()));
         setFilteredAthletes(result);
     }, [searchText, selectedCategory, myAthletes]);
 
     const handleUnfollow = async (athleteId) => {
         const updatedList = myAthletes.filter(a => a.id !== athleteId);
-        setMyAthletes(updatedList); // Optimistic remove
-
+        setMyAthletes(updatedList);
         const success = await toggleFollow(currentUserId, athleteId, true);
-        if (!success) {
-            Alert.alert("Error", "Could not unfollow.");
-            loadData();
-        }
+        if (!success) { Alert.alert("Error", "Could not unfollow."); loadData(); }
     };
 
-    // Note: If you have a dedicated Profile screen now, you can remove this function and the button below.
-    const handleSignOut = async () => {
-        await supabase.auth.signOut();
-    };
+    const handleSignOut = async () => { await supabase.auth.signOut(); };
 
     const renderCategoryItem = (item) => {
         const isSelected = selectedCategory === item.id;
@@ -89,34 +79,47 @@ export default function MyOrbitScreen() {
         );
     };
 
-    const renderAthlete = ({ item }) => (
-        <TouchableOpacity
-            style={styles.card}
-            onPress={() => navigation.navigate('AthleteDetail', { athleteId: item.id })}
-        >
-            {/* 🟢 UPDATED IMAGE COMPONENT */}
-            <Image
-                source={{ uri: item.image_url || 'https://via.placeholder.com/150' }}
-                style={styles.avatar}
-                contentFit="cover"
-                contentPosition="top center" // 👈 Keeps faces visible
-                transition={200}
-            />
-            <View style={styles.infoContainer}>
-                <Text style={styles.nameText}>{item.name}</Text>
-                <Text style={styles.sportText}>{item.subcategory || item.category || 'Sport'}</Text>
-            </View>
-            <TouchableOpacity onPress={() => handleUnfollow(item.id)} style={{ padding: 8 }}>
-                <Ionicons name="star" size={24} color="#FEC84B" />
+    const renderAthlete = ({ item }) => {
+        const hasImage = !!item.image_url;
+        const initials = getInitials(item.name);
+
+        return (
+            <TouchableOpacity
+                style={styles.card}
+                onPress={() => navigation.navigate('AthleteDetail', { athleteId: item.id })}
+            >
+                {/* 🟢 CONDITIONAL AVATAR */}
+                {hasImage ? (
+                    <Image
+                        source={{ uri: item.image_url }}
+                        style={styles.avatar}
+                        contentFit="cover"
+                        contentPosition="top center"
+                        transition={200}
+                    />
+                ) : (
+                    <View style={[styles.avatar, styles.initialsContainer]}>
+                        <Text style={styles.initialsText}>{initials}</Text>
+                    </View>
+                )}
+
+                <View style={styles.infoContainer}>
+                    <Text style={styles.nameText} numberOfLines={1}>
+                        {item.name} {getFlagEmoji(item.nationality)}
+                    </Text>
+                    <Text style={styles.sportText}>{item.subcategory || item.category || 'Sport'}</Text>
+                </View>
+                <TouchableOpacity onPress={() => handleUnfollow(item.id)} style={{ padding: 8 }}>
+                    <Ionicons name="star" size={24} color="#FEC84B" />
+                </TouchableOpacity>
             </TouchableOpacity>
-        </TouchableOpacity>
-    );
+        );
+    };
 
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
                 <Text style={styles.headerTitle}>My Orbit</Text>
-                {/* Remove this button if you have moved Logout to ProfileScreen */}
                 <TouchableOpacity onPress={handleSignOut} style={styles.signOutButton}>
                     <Ionicons name="log-out-outline" size={24} color="white" />
                 </TouchableOpacity>
@@ -162,7 +165,7 @@ export default function MyOrbitScreen() {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#FFFFFF' },
-    header: { backgroundColor: '#0F172A', height: 60, justifyContent: 'center', alignItems: 'center', paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0 },
+    header: { backgroundColor: '#0F172A', height: 60, justifyContent: 'center', alignItems: 'center' },
     headerTitle: { color: 'white', fontSize: 18, fontWeight: '600' },
     signOutButton: { position: 'absolute', right: 20, top: 18 },
     filterSection: { padding: 16, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#F2F4F7' },
@@ -174,8 +177,13 @@ const styles = StyleSheet.create({
     categoryTextSelected: { color: '#FFFFFF' },
     listContent: { padding: 16 },
     card: { flexDirection: 'row', alignItems: 'center', padding: 12, marginBottom: 12, backgroundColor: '#FFFFFF', borderRadius: 12, borderWidth: 1, borderColor: '#EAECF0', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 2 },
-    avatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#D0D5DD' },
-    infoContainer: { flex: 1, marginLeft: 12 },
+
+    avatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#F2F4F7' },
+    // 🟢 INITIALS STYLES
+    initialsContainer: { justifyContent: 'center', alignItems: 'center', backgroundColor: '#E4E7EC' },
+    initialsText: { fontSize: 18, fontWeight: '600', color: '#475467' },
+
+    infoContainer: { flex: 1, marginLeft: 12, justifyContent: 'center' },
     nameText: { fontSize: 16, fontWeight: '600', color: '#101828' },
     sportText: { color: '#7F56D9', fontSize: 14, marginTop: 2 },
     emptyContainer: { alignItems: 'center', marginTop: 40 },

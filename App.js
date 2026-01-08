@@ -4,6 +4,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
+import { SafeAreaProvider } from 'react-native-safe-area-context'; // 👈 1. Added Import
 import { supabase } from './lib/supabase';
 
 // --- SCREENS ---
@@ -72,26 +73,29 @@ export default function App() {
   }
 
   return (
-    <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {session && session.user ? (
-          <>
-            <Stack.Screen name="Main" component={MainTabs} />
-            <Stack.Screen
-              name="AthleteDetail"
-              component={AthleteDetailScreen}
-              options={{ headerShown: true, title: 'Athlete Profile' }}
-            />
-            <Stack.Screen
-              name="EventDetail"
-              component={EventDetailScreen}
-              options={{ headerShown: true, title: 'Event Results' }}
-            />
-          </>
-        ) : (
-          <Stack.Screen name="Login" component={LoginScreen} />
-        )}
-      </Stack.Navigator>
-    </NavigationContainer>
+    // 🟢 2. Wrapped entire app in SafeAreaProvider
+    <SafeAreaProvider>
+      <NavigationContainer>
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
+          {session && session.user ? (
+            <>
+              <Stack.Screen name="Main" component={MainTabs} />
+              <Stack.Screen
+                name="AthleteDetail"
+                component={AthleteDetailScreen}
+                options={{ headerShown: true, title: 'Athlete Profile' }}
+              />
+              <Stack.Screen
+                name="EventDetail"
+                component={EventDetailScreen}
+                options={{ headerShown: true, title: 'Event Results' }}
+              />
+            </>
+          ) : (
+            <Stack.Screen name="Login" component={LoginScreen} />
+          )}
+        </Stack.Navigator>
+      </NavigationContainer>
+    </SafeAreaProvider>
   );
 }

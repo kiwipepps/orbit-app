@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import {
-    View, Text, TouchableOpacity, StyleSheet, SafeAreaView,
+    View, Text, TouchableOpacity, StyleSheet,
     Platform, StatusBar, Alert, ActivityIndicator
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
 import { signOut } from '../services/api';

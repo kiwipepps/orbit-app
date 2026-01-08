@@ -1,15 +1,16 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
     View, Text, FlatList, TouchableOpacity, TextInput,
-    StyleSheet, ActivityIndicator, SafeAreaView, Platform, StatusBar, Alert, ScrollView
+    StyleSheet, ActivityIndicator, ScrollView, Platform, StatusBar, Alert
 } from 'react-native';
-import { Image } from 'expo-image'; // 👈 IMPORT FROM EXPO-IMAGE
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { searchAthletes, fetchFollowedAthletes, toggleFollow } from '../services/api';
+import { getFlagEmoji } from '../utils/flagHelper';
 
-// Defined Categories (Same as My Orbit)
 const SPORTS_CATEGORIES = [
     { id: 'all', name: 'All', icon: 'apps' },
     { id: 'tennis', name: 'Tennis', icon: 'tennisball' },
@@ -17,32 +18,28 @@ const SPORTS_CATEGORIES = [
     { id: 'f1', name: 'F1', icon: 'car-sport' },
 ];
 
+// 🟢 HELPER
+const getInitials = (name) => {
+    if (!name) return '';
+    const parts = name.trim().split(' ');
+    if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+    return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+};
+
 export default function SearchScreen() {
     const navigation = useNavigation();
     const [searchText, setSearchText] = useState('');
     const [selectedCategory, setSelectedCategory] = useState('all');
-
     const [athletes, setAthletes] = useState([]);
     const [followedIds, setFollowedIds] = useState(new Set());
     const [loading, setLoading] = useState(false);
+    const [page, setPage] = useState(0);
+    const [hasMore, setHasMore] = useState(true);
     const [currentUserId, setCurrentUserId] = useState(null);
 
-    // 1. SYNC LOGIC: Refresh 'Follows' every time we return to this screen
-    useFocusEffect(
-        useCallback(() => {
-            refreshFollowStatus();
-        }, [])
-    );
-
-    // Initial Setup
-    useEffect(() => {
-        setupUser();
-    }, []);
-
-    // Search Trigger (Runs when text OR category changes)
-    useEffect(() => {
-        performSearch(searchText, selectedCategory);
-    }, [searchText, selectedCategory]);
+    useFocusEffect(useCallback(() => { refreshFollowStatus(); }, []));
+    useEffect(() => { setupUser(); }, []);
+    useEffect(() => { resetAndSearch(); }, [searchText, selectedCategory]);
 
     const setupUser = async () => {
         const { data: { user } } = await supabase.auth.getUser();
@@ -57,30 +54,38 @@ export default function SearchScreen() {
         }
     };
 
-    const performSearch = async (query, category) => {
+    const resetAndSearch = async () => {
         setLoading(true);
-        // Pass both query AND category to the server
-        const results = await searchAthletes(query, category);
+        setPage(0);
+        setHasMore(true);
+        const results = await searchAthletes(searchText, selectedCategory, 0);
         setAthletes(results || []);
+        setLoading(false);
+    };
+
+    const loadMore = async () => {
+        if (!hasMore || loading) return;
+        setLoading(true);
+        const nextPage = page + 1;
+        const results = await searchAthletes(searchText, selectedCategory, nextPage);
+        if (results && results.length > 0) {
+            setAthletes(prev => [...prev, ...results]);
+            setPage(nextPage);
+        } else {
+            setHasMore(false);
+        }
         setLoading(false);
     };
 
     const handleToggleFollow = async (athleteId) => {
         if (!currentUserId) return;
-
         const isFollowing = followedIds.has(athleteId);
-
-        // Optimistic Update
         const nextFollowedIds = new Set(followedIds);
         if (isFollowing) nextFollowedIds.delete(athleteId);
         else nextFollowedIds.add(athleteId);
         setFollowedIds(nextFollowedIds);
-
         const success = await toggleFollow(currentUserId, athleteId, isFollowing);
-        if (!success) {
-            setFollowedIds(followedIds); // Revert on fail
-            Alert.alert("Error", "Could not update follow status");
-        }
+        if (!success) { setFollowedIds(followedIds); Alert.alert("Error", "Could not update follow status"); }
     };
 
     const renderCategoryItem = (item) => {
@@ -99,21 +104,33 @@ export default function SearchScreen() {
 
     const renderAthlete = ({ item }) => {
         const isFollowing = followedIds.has(item.id);
+        const hasImage = !!item.image_url;
+        const initials = getInitials(item.name);
+
         return (
             <TouchableOpacity
                 style={styles.card}
                 onPress={() => navigation.navigate('AthleteDetail', { athleteId: item.id })}
             >
-                {/* 🟢 UPDATED IMAGE COMPONENT */}
-                <Image
-                    source={{ uri: item.image_url || 'https://via.placeholder.com/150' }}
-                    style={styles.avatar}
-                    contentFit="cover"
-                    contentPosition="top center" // 👈 Keeps faces visible
-                    transition={200}
-                />
+                {/* 🟢 CONDITIONAL AVATAR */}
+                {hasImage ? (
+                    <Image
+                        source={{ uri: item.image_url }}
+                        style={styles.avatar}
+                        contentFit="cover"
+                        contentPosition="top center"
+                        transition={200}
+                    />
+                ) : (
+                    <View style={[styles.avatar, styles.initialsContainer]}>
+                        <Text style={styles.initialsText}>{initials}</Text>
+                    </View>
+                )}
+
                 <View style={styles.infoContainer}>
-                    <Text style={styles.nameText}>{item.name}</Text>
+                    <Text style={styles.nameText} numberOfLines={1}>
+                        {item.name} {getFlagEmoji(item.nationality)}
+                    </Text>
                     <Text style={styles.sportText}>{item.subcategory || item.category || 'Athlete'}</Text>
                 </View>
                 <TouchableOpacity
@@ -137,7 +154,6 @@ export default function SearchScreen() {
             </View>
 
             <View style={styles.filterSection}>
-                {/* Search Input */}
                 <View style={styles.searchContainer}>
                     <Ionicons name="search" size={20} color="#667085" style={{ marginRight: 8 }} />
                     <TextInput
@@ -148,7 +164,6 @@ export default function SearchScreen() {
                         onChangeText={setSearchText}
                     />
                 </View>
-                {/* Category Filter */}
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingVertical: 10 }}>
                     {SPORTS_CATEGORIES.map(renderCategoryItem)}
                 </ScrollView>
@@ -157,8 +172,10 @@ export default function SearchScreen() {
             <FlatList
                 data={athletes}
                 renderItem={renderAthlete}
-                keyExtractor={item => item.id}
+                keyExtractor={(item, index) => `${item.id}-${index}`}
                 contentContainerStyle={styles.listContent}
+                onEndReached={loadMore}
+                onEndReachedThreshold={0.5}
                 ListFooterComponent={loading && <ActivityIndicator style={{ marginTop: 20 }} color="#7F56D9" />}
             />
         </SafeAreaView>
@@ -167,15 +184,20 @@ export default function SearchScreen() {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#FFFFFF' },
-    header: { backgroundColor: '#0F172A', height: 60, justifyContent: 'center', alignItems: 'center', paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0 },
+    header: { backgroundColor: '#0F172A', height: 60, justifyContent: 'center', alignItems: 'center' },
     headerTitle: { color: 'white', fontSize: 18, fontWeight: '600' },
     filterSection: { padding: 16, borderBottomWidth: 1, borderBottomColor: '#F2F4F7' },
     searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#D0D5DD', borderRadius: 8, paddingHorizontal: 12, height: 44 },
     searchInput: { flex: 1, fontSize: 16, color: '#101828' },
     listContent: { padding: 16 },
     card: { flexDirection: 'row', alignItems: 'center', padding: 12, marginBottom: 12, backgroundColor: '#FFFFFF', borderRadius: 12, borderWidth: 1, borderColor: '#EAECF0' },
-    avatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#D0D5DD' },
-    infoContainer: { flex: 1, marginLeft: 12 },
+
+    avatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#F2F4F7' },
+    // 🟢 INITIALS STYLES
+    initialsContainer: { justifyContent: 'center', alignItems: 'center', backgroundColor: '#E4E7EC' },
+    initialsText: { fontSize: 18, fontWeight: '600', color: '#475467' },
+
+    infoContainer: { flex: 1, marginLeft: 12, justifyContent: 'center' },
     nameText: { fontSize: 16, fontWeight: '600', color: '#101828' },
     sportText: { color: '#7F56D9', fontSize: 14, marginTop: 2 },
     followButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#F9F5FF', borderWidth: 1, borderColor: '#E9D7FE', justifyContent: 'center', alignItems: 'center' },

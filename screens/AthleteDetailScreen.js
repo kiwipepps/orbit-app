@@ -1,10 +1,11 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import {
     View, Text, FlatList, ActivityIndicator, StyleSheet,
-    SafeAreaView, TouchableOpacity, Platform, StatusBar, Linking, Alert // 👈 Added Alert
+    TouchableOpacity, Linking, Alert
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
-import { Ionicons } from '@expo/vector-icons'; // 👈 Import Icon
+import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { fetchAthleteProfile } from '../services/api';
 
@@ -15,8 +16,15 @@ const DISPLAY_NAMES = {
     "round_label": "Round", "round": "Round", "phase": "Round",
     "wind": "Wind", "venue": "Location", "date": "Date"
 };
-
 const HIDDEN_FIELDS = ['id', 'hidden_id', 'event_name_raw', 'athlete_id', 'entity_id', 'event_key'];
+
+// 🟢 HELPER
+const getInitials = (name) => {
+    if (!name) return '';
+    const parts = name.trim().split(' ');
+    if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+    return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+};
 
 export default function AthleteDetailScreen({ route }) {
     const { athleteId } = route.params;
@@ -24,22 +32,16 @@ export default function AthleteDetailScreen({ route }) {
     const [profile, setProfile] = useState(null);
     const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        loadProfile();
-    }, []);
+    useEffect(() => { loadProfile(); }, []);
 
     const loadProfile = async () => {
         try {
             const data = await fetchAthleteProfile(athleteId);
             setProfile(data);
-        } catch (e) {
-            console.error(e);
-        } finally {
-            setLoading(false);
-        }
+        } catch (e) { console.error(e); }
+        finally { setLoading(false); }
     };
 
-    // --- SORTING LOGIC ---
     const sortedEvents = useMemo(() => {
         if (!profile?.events) return [];
         const getRoundScore = (event) => {
@@ -58,15 +60,8 @@ export default function AthleteDetailScreen({ route }) {
         });
     }, [profile]);
 
-    // --- FORMATTERS ---
     const formatKey = (key) => DISPLAY_NAMES[key] || key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-
-    const getOrdinal = (n) => {
-        const s = ["th", "st", "nd", "rd"];
-        const v = n % 100;
-        return n + (s[(v - 20) % 10] || s[v] || s[0]);
-    };
-
+    const getOrdinal = (n) => { const s = ["th", "st", "nd", "rd"]; const v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
     const formatValue = (key, value) => {
         if (!value) return '-';
         if (key.toLowerCase().includes('rank') || key.toLowerCase().includes('place')) {
@@ -76,16 +71,12 @@ export default function AthleteDetailScreen({ route }) {
         if (typeof value === 'string') return value.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
         return String(value);
     };
-
     const getPlaceInfo = (resultObj) => {
         if (!resultObj) return null;
-        const placeKey = Object.keys(resultObj).find(k =>
-            ['place_rank', 'rank', 'pos', 'place'].includes(k.toLowerCase())
-        );
+        const placeKey = Object.keys(resultObj).find(k => ['place_rank', 'rank', 'pos', 'place'].includes(k.toLowerCase()));
         if (placeKey) return { key: placeKey, value: formatValue(placeKey, resultObj[placeKey]) };
         return null;
     };
-
     const getSortedEntries = (resultObj) => {
         if (!resultObj) return [];
         const getPriority = (k) => {
@@ -99,42 +90,39 @@ export default function AthleteDetailScreen({ route }) {
         return Object.entries(resultObj).sort(([a], [b]) => getPriority(a) - getPriority(b));
     };
 
-    // --- 🟢 NEW: POPUP ATTRIBUTION ---
     const showAttribution = () => {
         const license = profile?.image_license || 'CC BY-SA';
         const sourceUrl = profile?.image_source_page;
-
-        Alert.alert(
-            "Image Attribution",
-            `Image licensed under ${license}.\nSource: Wikimedia Commons`,
-            [
-                { text: "OK", style: "cancel" },
-                sourceUrl ? {
-                    text: "Visit Source",
-                    onPress: () => Linking.openURL(sourceUrl)
-                } : null
-            ].filter(Boolean) // Hides "Visit Source" if no URL exists
+        Alert.alert("Image Attribution", `Image licensed under ${license}.\nSource: Wikimedia Commons`,
+            [{ text: "OK", style: "cancel" }, sourceUrl ? { text: "Visit Source", onPress: () => Linking.openURL(sourceUrl) } : null].filter(Boolean)
         );
     };
 
     if (loading) return <ActivityIndicator style={{ marginTop: 50 }} size="large" color="#7F56D9" />;
 
+    const hasImage = !!profile?.image_url;
+    const initials = getInitials(profile?.name);
+
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
-
-                {/* 🟢 AVATAR CONTAINER (Holds Image + Icon) */}
                 <View style={styles.avatarContainer}>
-                    <Image
-                        source={{ uri: profile?.image_url || 'https://via.placeholder.com/150' }}
-                        style={styles.avatar}
-                        contentFit="cover"
-                        contentPosition="top center"
-                        transition={500}
-                    />
+                    {/* 🟢 CONDITIONAL AVATAR */}
+                    {hasImage ? (
+                        <Image
+                            source={{ uri: profile.image_url }}
+                            style={styles.avatar}
+                            contentFit="cover"
+                            contentPosition="top center"
+                            transition={500}
+                        />
+                    ) : (
+                        <View style={[styles.avatar, styles.initialsContainer]}>
+                            <Text style={styles.initialsTextBig}>{initials}</Text>
+                        </View>
+                    )}
 
-                    {/* Info Icon Button */}
-                    {(profile?.image_license || profile?.image_source_page) && (
+                    {(hasImage && (profile?.image_license || profile?.image_source_page)) && (
                         <TouchableOpacity style={styles.infoIcon} onPress={showAttribution}>
                             <Ionicons name="information-circle" size={24} color="#7F56D9" />
                         </TouchableOpacity>
@@ -147,19 +135,13 @@ export default function AthleteDetailScreen({ route }) {
 
             <View style={styles.content}>
                 <Text style={styles.sectionTitle}>Recent Results</Text>
-
                 <FlatList
                     data={sortedEvents}
                     keyExtractor={(item) => item.id}
                     contentContainerStyle={{ paddingBottom: 20 }}
                     renderItem={({ item }) => {
                         const placeInfo = getPlaceInfo(item.result);
-
-                        const goToEvent = () => navigation.push('EventDetail', {
-                            title: item.title,
-                            eventKey: item.event_key,
-                            date: item.start_time
-                        });
+                        const goToEvent = () => navigation.push('EventDetail', { title: item.title, eventKey: item.event_key, date: item.start_time });
 
                         return (
                             <View style={styles.eventCard}>
@@ -174,9 +156,7 @@ export default function AthleteDetailScreen({ route }) {
                                         </View>
                                     )}
                                 </TouchableOpacity>
-
                                 <View style={styles.divider} />
-
                                 <TouchableOpacity style={styles.statsContainer} onPress={goToEvent}>
                                     {item.result && typeof item.result === 'object' ? (
                                         getSortedEntries(item.result).map(([key, value]) => {
@@ -188,9 +168,7 @@ export default function AthleteDetailScreen({ route }) {
                                                 </View>
                                             );
                                         })
-                                    ) : (
-                                        <Text style={{ color: '#666' }}>No detailed results.</Text>
-                                    )}
+                                    ) : (<Text style={{ color: '#666' }}>No detailed results.</Text>)}
                                 </TouchableOpacity>
                             </View>
                         );
@@ -205,21 +183,14 @@ const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#FFFFFF' },
     header: { alignItems: 'center', padding: 24, backgroundColor: '#F9FAFB', borderBottomWidth: 1, borderColor: '#EAECF0' },
 
-    // 🟢 NEW AVATAR LAYOUT
-    avatarContainer: {
-        width: 100, height: 100, marginBottom: 16, position: 'relative'
-    },
-    avatar: {
-        width: '100%', height: '100%', borderRadius: 50,
-        borderWidth: 3, borderColor: '#FFFFFF',
-        backgroundColor: '#F2F4F7'
-    },
-    infoIcon: {
-        position: 'absolute', bottom: 0, right: 0,
-        backgroundColor: '#FFFFFF', borderRadius: 12,
-        shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 2
-    },
+    avatarContainer: { width: 100, height: 100, marginBottom: 16, position: 'relative' },
+    avatar: { width: '100%', height: '100%', borderRadius: 50, borderWidth: 3, borderColor: '#FFFFFF', backgroundColor: '#F2F4F7' },
 
+    // 🟢 INITIALS STYLES
+    initialsContainer: { justifyContent: 'center', alignItems: 'center', backgroundColor: '#E4E7EC' },
+    initialsTextBig: { fontSize: 32, fontWeight: '700', color: '#475467' },
+
+    infoIcon: { position: 'absolute', bottom: 0, right: 0, backgroundColor: '#FFFFFF', borderRadius: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 2 },
     name: { fontSize: 24, fontWeight: '700', color: '#101828', textAlign: 'center' },
     category: { color: '#7F56D9', fontSize: 16, fontWeight: '500', marginTop: 4 },
     content: { flex: 1, paddingHorizontal: 16 },

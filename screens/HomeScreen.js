@@ -1,9 +1,10 @@
 import React, { useState, useCallback } from 'react';
 import {
     View, Text, FlatList, StyleSheet, ActivityIndicator,
-    SafeAreaView, TouchableOpacity, Platform, StatusBar
+    TouchableOpacity, Platform, StatusBar
 } from 'react-native';
-import { Image } from 'expo-image'; // 👈 IMPORT FROM EXPO-IMAGE
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Image } from 'expo-image';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { fetchUserFeed } from '../services/api';
@@ -16,6 +17,14 @@ const DISPLAY_NAMES = {
 };
 
 const HIDDEN_FIELDS = ['id', 'hidden_id', 'event_name_raw', 'athlete_id', 'entity_id', 'event_key'];
+
+// 🟢 HELPER: Get Initials
+const getInitials = (name) => {
+    if (!name) return '';
+    const parts = name.trim().split(' ');
+    if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+    return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+};
 
 export default function HomeScreen() {
     const navigation = useNavigation();
@@ -33,13 +42,52 @@ export default function HomeScreen() {
             const { data: { user } } = await supabase.auth.getUser();
             if (user) {
                 const data = await fetchUserFeed(user.id);
-                setFeed(data || []);
+                const processed = processFeed(data || []);
+                setFeed(processed);
             }
         } catch (error) {
             console.error(error);
         } finally {
             setLoading(false);
         }
+    };
+
+    const getRoundScore = (item) => {
+        const text = (item.title + " " + JSON.stringify(item.result)).toLowerCase();
+        if (text.includes('final') && !text.includes('semi') && !text.includes('quarter')) return 100;
+        if (text.includes('semi')) return 90;
+        if (text.includes('quarter')) return 80;
+        if (text.includes('round 3')) return 70;
+        if (text.includes('round 2')) return 60;
+        if (text.includes('round 1')) return 50;
+        if (text.includes('qual')) return 40;
+        if (text.includes('heat')) return 30;
+        return 0;
+    };
+
+    const getDiscipline = (result) => {
+        if (!result) return 'unknown';
+        if (result.discipline_clean) return result.discipline_clean;
+        if (result.discipline) return result.discipline;
+        if (result.event) return result.event;
+        const key = Object.keys(result).find(k => k.toLowerCase().includes('discipline'));
+        return key ? result[key] : 'general';
+    };
+
+    const processFeed = (rawData) => {
+        const grouped = {};
+        rawData.forEach(item => {
+            const discipline = getDiscipline(item.result);
+            const uniqueKey = `${item.entity_id}_${item.title}_${discipline}`;
+            const currentScore = getRoundScore(item);
+            const existingItem = grouped[uniqueKey];
+            if (!existingItem || currentScore > getRoundScore(existingItem)) {
+                grouped[uniqueKey] = item;
+            }
+        });
+        return Object.values(grouped).sort((a, b) =>
+            new Date(b.start_time).getTime() - new Date(a.start_time).getTime()
+        );
     };
 
     const formatKey = (key) => DISPLAY_NAMES[key] || key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
@@ -69,23 +117,17 @@ export default function HomeScreen() {
         return null;
     };
 
-    const getSortPriority = (key) => {
-        const k = key.toLowerCase();
-        if (k.includes('discipline') || k.includes('event')) return 1;
-        if (k.includes('mark') || k.includes('time') || k.includes('result')) return 2;
-        if (k.includes('round') || k.includes('heat') || k.includes('semi') || k.includes('final')) return 3;
-        if (k.includes('wind')) return 4;
-        return 5;
-    };
-
     const getSortedEntries = (resultObj) => {
         if (!resultObj) return [];
-        return Object.entries(resultObj).sort(([a], [b]) => {
-            const priorityA = getSortPriority(a);
-            const priorityB = getSortPriority(b);
-            if (priorityA !== priorityB) return priorityA - priorityB;
-            return a.localeCompare(b);
-        });
+        const getPriority = (k) => {
+            const key = k.toLowerCase();
+            if (key.includes('discipline') || key.includes('event')) return 1;
+            if (key.includes('mark') || key.includes('time')) return 2;
+            if (key.includes('round')) return 3;
+            if (key.includes('wind')) return 4;
+            return 5;
+        };
+        return Object.entries(resultObj).sort(([a], [b]) => getPriority(a) - getPriority(b));
     };
 
     const renderFeedItem = ({ item }) => {
@@ -97,18 +139,28 @@ export default function HomeScreen() {
             date: item.start_time
         });
 
+        // 🟢 PREPARE AVATAR
+        const hasImage = !!item.entities?.image_url;
+        const initials = getInitials(item.entities?.name);
+
         return (
             <View style={styles.card}>
                 <View style={styles.cardTop}>
                     <View style={styles.headerLeft}>
                         <TouchableOpacity onPress={goToAthlete}>
-                            {/* 🟢 UPDATED IMAGE COMPONENT */}
-                            <Image
-                                source={{ uri: item.entities?.image_url || 'https://via.placeholder.com/50' }}
-                                style={styles.avatarSmall}
-                                contentFit="cover"
-                                contentPosition="top center" // 👈 Aligns small avatars too
-                            />
+                            {/* 🟢 CONDITIONAL AVATAR */}
+                            {hasImage ? (
+                                <Image
+                                    source={{ uri: item.entities.image_url }}
+                                    style={styles.avatarSmall}
+                                    contentFit="cover"
+                                    contentPosition="top center"
+                                />
+                            ) : (
+                                <View style={[styles.avatarSmall, styles.initialsContainer]}>
+                                    <Text style={styles.initialsTextSmall}>{initials}</Text>
+                                </View>
+                            )}
                         </TouchableOpacity>
 
                         <View style={{ flex: 1 }}>
@@ -188,9 +240,13 @@ const styles = StyleSheet.create({
     cardTop: { padding: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#F9FAFB', borderTopLeftRadius: 12, borderTopRightRadius: 12 },
     headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8 },
     headerRight: { justifyContent: 'center' },
-    avatarSmall: {
-        width: 40, height: 40, borderRadius: 20, marginRight: 12, backgroundColor: '#DDD'
-    },
+
+    avatarSmall: { width: 40, height: 40, borderRadius: 20, marginRight: 12, backgroundColor: '#F2F4F7' },
+
+    // 🟢 INITIALS STYLES
+    initialsContainer: { justifyContent: 'center', alignItems: 'center', backgroundColor: '#E4E7EC' },
+    initialsTextSmall: { fontSize: 14, fontWeight: '700', color: '#475467' },
+
     athleteName: { fontSize: 16, fontWeight: '700', color: '#101828' },
     eventMeta: { fontSize: 12, color: '#667085', marginTop: 2 },
     bigPlaceText: { fontSize: 20, fontWeight: '800', color: '#7F56D9', textAlign: 'right' },
