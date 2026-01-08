@@ -1,13 +1,13 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import {
     View, Text, FlatList, ActivityIndicator, StyleSheet,
-    SafeAreaView, TouchableOpacity, Platform, StatusBar
+    SafeAreaView, TouchableOpacity, Platform, StatusBar, Linking, Alert // 👈 Added Alert
 } from 'react-native';
-import { Image } from 'expo-image'; // 👈 IMPORT FROM EXPO-IMAGE
+import { Image } from 'expo-image';
+import { Ionicons } from '@expo/vector-icons'; // 👈 Import Icon
 import { useNavigation } from '@react-navigation/native';
 import { fetchAthleteProfile } from '../services/api';
 
-// 1. CUSTOM LABELS
 const DISPLAY_NAMES = {
     "place_rank": "Place", "rank": "Place", "pos": "Place",
     "mark": "Mark",
@@ -99,19 +99,48 @@ export default function AthleteDetailScreen({ route }) {
         return Object.entries(resultObj).sort(([a], [b]) => getPriority(a) - getPriority(b));
     };
 
+    // --- 🟢 NEW: POPUP ATTRIBUTION ---
+    const showAttribution = () => {
+        const license = profile?.image_license || 'CC BY-SA';
+        const sourceUrl = profile?.image_source_page;
+
+        Alert.alert(
+            "Image Attribution",
+            `Image licensed under ${license}.\nSource: Wikimedia Commons`,
+            [
+                { text: "OK", style: "cancel" },
+                sourceUrl ? {
+                    text: "Visit Source",
+                    onPress: () => Linking.openURL(sourceUrl)
+                } : null
+            ].filter(Boolean) // Hides "Visit Source" if no URL exists
+        );
+    };
+
     if (loading) return <ActivityIndicator style={{ marginTop: 50 }} size="large" color="#7F56D9" />;
 
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
-                {/* 🟢 UPDATED IMAGE COMPONENT */}
-                <Image
-                    source={{ uri: profile?.image_url || 'https://via.placeholder.com/150' }}
-                    style={styles.avatar}
-                    contentFit="cover"            // Replaces resizeMode="cover"
-                    contentPosition="top center"  // 👈 FIX: Aligns image to the top (Head)
-                    transition={500}              // Fade in effect
-                />
+
+                {/* 🟢 AVATAR CONTAINER (Holds Image + Icon) */}
+                <View style={styles.avatarContainer}>
+                    <Image
+                        source={{ uri: profile?.image_url || 'https://via.placeholder.com/150' }}
+                        style={styles.avatar}
+                        contentFit="cover"
+                        contentPosition="top center"
+                        transition={500}
+                    />
+
+                    {/* Info Icon Button */}
+                    {(profile?.image_license || profile?.image_source_page) && (
+                        <TouchableOpacity style={styles.infoIcon} onPress={showAttribution}>
+                            <Ionicons name="information-circle" size={24} color="#7F56D9" />
+                        </TouchableOpacity>
+                    )}
+                </View>
+
                 <Text style={styles.name}>{profile?.name}</Text>
                 <Text style={styles.category}>{profile?.subcategory || profile?.category || 'Athlete'}</Text>
             </View>
@@ -175,12 +204,22 @@ export default function AthleteDetailScreen({ route }) {
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#FFFFFF' },
     header: { alignItems: 'center', padding: 24, backgroundColor: '#F9FAFB', borderBottomWidth: 1, borderColor: '#EAECF0' },
+
+    // 🟢 NEW AVATAR LAYOUT
+    avatarContainer: {
+        width: 100, height: 100, marginBottom: 16, position: 'relative'
+    },
     avatar: {
-        width: 100, height: 100, borderRadius: 50, marginBottom: 16,
+        width: '100%', height: '100%', borderRadius: 50,
         borderWidth: 3, borderColor: '#FFFFFF',
-        shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4,
         backgroundColor: '#F2F4F7'
     },
+    infoIcon: {
+        position: 'absolute', bottom: 0, right: 0,
+        backgroundColor: '#FFFFFF', borderRadius: 12,
+        shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 2
+    },
+
     name: { fontSize: 24, fontWeight: '700', color: '#101828', textAlign: 'center' },
     category: { color: '#7F56D9', fontSize: 16, fontWeight: '500', marginTop: 4 },
     content: { flex: 1, paddingHorizontal: 16 },
