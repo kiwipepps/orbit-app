@@ -1,24 +1,23 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import {
     View, Text, FlatList, ActivityIndicator, StyleSheet,
-    TouchableOpacity, Linking, Alert
+    TouchableOpacity, Linking, Alert, Modal, TouchableWithoutFeedback
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { fetchAthleteProfile } from '../services/api';
+import { getFlagEmoji } from '../utils/flagHelper';
 
 const DISPLAY_NAMES = {
     "place_rank": "Place", "rank": "Place", "pos": "Place",
-    "mark": "Mark",
-    "discipline_clean": "Event", "event": "Event",
+    "mark": "Mark", "discipline_clean": "Event", "event": "Event",
     "round_label": "Round", "round": "Round", "phase": "Round",
     "wind": "Wind", "venue": "Location", "date": "Date"
 };
 const HIDDEN_FIELDS = ['id', 'hidden_id', 'event_name_raw', 'athlete_id', 'entity_id', 'event_key'];
 
-// 🟢 HELPER
 const getInitials = (name) => {
     if (!name) return '';
     const parts = name.trim().split(' ');
@@ -31,6 +30,7 @@ export default function AthleteDetailScreen({ route }) {
     const navigation = useNavigation();
     const [profile, setProfile] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [isModalVisible, setModalVisible] = useState(false);
 
     useEffect(() => { loadProfile(); }, []);
 
@@ -41,6 +41,21 @@ export default function AthleteDetailScreen({ route }) {
         } catch (e) { console.error(e); }
         finally { setLoading(false); }
     };
+
+    const eventsSummary = useMemo(() => {
+        if (!profile?.events) return '';
+        const set = new Set();
+        profile.events.forEach(e => {
+            const r = e.result;
+            if (!r) return;
+            let discipline = r.discipline_clean || r.discipline || r.event;
+            if (discipline) {
+                discipline = discipline.replace(/ Short Track/gi, '').replace(/ Indoor/gi, '').trim();
+                set.add(discipline);
+            }
+        });
+        return Array.from(set).sort().join(', ');
+    }, [profile]);
 
     const sortedEvents = useMemo(() => {
         if (!profile?.events) return [];
@@ -64,7 +79,7 @@ export default function AthleteDetailScreen({ route }) {
     const getOrdinal = (n) => { const s = ["th", "st", "nd", "rd"]; const v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
     const formatValue = (key, value) => {
         if (!value) return '-';
-        if (key.toLowerCase().includes('rank') || key.toLowerCase().includes('place')) {
+        if (key.toLowerCase().includes('rank') || key.toLowerCase().includes('place') || key.toLowerCase() === 'pos') {
             const num = parseInt(String(value).replace(/[^0-9]/g, ''), 10);
             if (!isNaN(num)) return getOrdinal(num);
         }
@@ -90,51 +105,69 @@ export default function AthleteDetailScreen({ route }) {
         return Object.entries(resultObj).sort(([a], [b]) => getPriority(a) - getPriority(b));
     };
 
-    const showAttribution = () => {
-        const license = profile?.image_license || 'CC BY-SA';
-        const sourceUrl = profile?.image_source_page;
-        Alert.alert("Image Attribution", `Image licensed under ${license}.\nSource: Wikimedia Commons`,
-            [{ text: "OK", style: "cancel" }, sourceUrl ? { text: "Visit Source", onPress: () => Linking.openURL(sourceUrl) } : null].filter(Boolean)
-        );
-    };
-
     if (loading) return <ActivityIndicator style={{ marginTop: 50 }} size="large" color="#7F56D9" />;
 
     const hasImage = !!profile?.image_url;
     const initials = getInitials(profile?.name);
 
     return (
-        <SafeAreaView style={styles.container}>
+        // 🟢 FIX: 'edges' prop prevents double padding at the top
+        <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
             <View style={styles.header}>
-                <View style={styles.avatarContainer}>
-                    {/* 🟢 CONDITIONAL AVATAR */}
-                    {hasImage ? (
-                        <Image
-                            source={{ uri: profile.image_url }}
-                            style={styles.avatar}
-                            contentFit="cover"
-                            contentPosition="top center"
-                            transition={500}
-                        />
-                    ) : (
-                        <View style={[styles.avatar, styles.initialsContainer]}>
-                            <Text style={styles.initialsTextBig}>{initials}</Text>
+                <View style={styles.headerRow}>
+                    <TouchableOpacity
+                        style={styles.avatarContainer}
+                        onPress={() => hasImage && setModalVisible(true)}
+                        activeOpacity={hasImage ? 0.7 : 1}
+                    >
+                        {hasImage ? (
+                            <Image
+                                source={{ uri: profile.image_url }}
+                                style={styles.avatar}
+                                contentFit="cover"
+                                contentPosition="top center"
+                                transition={200}
+                            />
+                        ) : (
+                            <View style={[styles.avatar, styles.initialsContainer]}>
+                                <Text style={styles.initialsTextBig}>{initials}</Text>
+                            </View>
+                        )}
+                    </TouchableOpacity>
+
+                    <View style={styles.infoContainer}>
+                        <Text style={styles.name} numberOfLines={2} adjustsFontSizeToFit>{profile?.name}</Text>
+
+                        <View style={styles.metaRow}>
+                            {profile?.nationality && (
+                                <View style={styles.pill}>
+                                    <Text style={styles.flag}>{getFlagEmoji(profile.nationality)}</Text>
+                                    <Text style={styles.metaText}>{profile.nationality}</Text>
+                                </View>
+                            )}
+                            {profile?.birth_date && (
+                                <View style={styles.pill}>
+                                    <Text style={styles.metaText}>
+                                        {new Date(profile.birth_date).getFullYear()}
+                                    </Text>
+                                </View>
+                            )}
                         </View>
-                    )}
 
-                    {(hasImage && (profile?.image_license || profile?.image_source_page)) && (
-                        <TouchableOpacity style={styles.infoIcon} onPress={showAttribution}>
-                            <Ionicons name="information-circle" size={24} color="#7F56D9" />
-                        </TouchableOpacity>
-                    )}
+                        {eventsSummary.length > 0 ? (
+                            <Text style={styles.eventsText} numberOfLines={1}>
+                                {eventsSummary}
+                            </Text>
+                        ) : (
+                            <Text style={styles.category}>{profile?.subcategory || profile?.category || 'Athlete'}</Text>
+                        )}
+                    </View>
                 </View>
-
-                <Text style={styles.name}>{profile?.name}</Text>
-                <Text style={styles.category}>{profile?.subcategory || profile?.category || 'Athlete'}</Text>
             </View>
 
             <View style={styles.content}>
                 <Text style={styles.sectionTitle}>Recent Results</Text>
+
                 <FlatList
                     data={sortedEvents}
                     keyExtractor={(item) => item.id}
@@ -144,8 +177,8 @@ export default function AthleteDetailScreen({ route }) {
                         const goToEvent = () => navigation.push('EventDetail', { title: item.title, eventKey: item.event_key, date: item.start_time });
 
                         return (
-                            <View style={styles.eventCard}>
-                                <TouchableOpacity style={styles.cardHeader} onPress={goToEvent}>
+                            <TouchableOpacity style={styles.eventCard} onPress={goToEvent} activeOpacity={0.7}>
+                                <View style={styles.cardHeader}>
                                     <View style={styles.headerLeft}>
                                         <Text style={styles.eventTitle}>{item.title}</Text>
                                         <Text style={styles.eventDate}>{new Date(item.start_time).toLocaleDateString()}</Text>
@@ -155,9 +188,10 @@ export default function AthleteDetailScreen({ route }) {
                                             <Text style={styles.bigPlaceText}>{placeInfo.value}</Text>
                                         </View>
                                     )}
-                                </TouchableOpacity>
+                                </View>
                                 <View style={styles.divider} />
-                                <TouchableOpacity style={styles.statsContainer} onPress={goToEvent}>
+
+                                <View style={styles.statsContainer}>
                                     {item.result && typeof item.result === 'object' ? (
                                         getSortedEntries(item.result).map(([key, value]) => {
                                             if (HIDDEN_FIELDS.includes(key) || key === placeInfo?.key) return null;
@@ -169,32 +203,77 @@ export default function AthleteDetailScreen({ route }) {
                                             );
                                         })
                                     ) : (<Text style={{ color: '#666' }}>No detailed results.</Text>)}
-                                </TouchableOpacity>
-                            </View>
+                                </View>
+                            </TouchableOpacity>
                         );
                     }}
                 />
             </View>
+
+            <Modal
+                visible={isModalVisible}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setModalVisible(false)}
+            >
+                <TouchableWithoutFeedback onPress={() => setModalVisible(false)}>
+                    <View style={styles.modalOverlay}>
+                        <View style={styles.modalContent}>
+                            <Image
+                                source={{ uri: profile?.image_url }}
+                                style={styles.modalImage}
+                                contentFit="contain"
+                            />
+
+                            <View style={styles.attributionContainer}>
+                                <Text style={styles.attributionTitle}>Image Attribution</Text>
+                                <Text style={styles.attributionText}>
+                                    Licensed under: {profile?.image_license || 'Unknown'}
+                                </Text>
+                                <Text style={styles.attributionSource}>
+                                    Source: Wikimedia Commons
+                                </Text>
+                                {profile?.image_source_page && (
+                                    <TouchableOpacity onPress={() => Linking.openURL(profile.image_source_page)}>
+                                        <Text style={styles.linkText}>Visit Source Page</Text>
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+                        </View>
+                    </View>
+                </TouchableWithoutFeedback>
+            </Modal>
         </SafeAreaView>
     );
 }
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#FFFFFF' },
-    header: { alignItems: 'center', padding: 24, backgroundColor: '#F9FAFB', borderBottomWidth: 1, borderColor: '#EAECF0' },
 
-    avatarContainer: { width: 100, height: 100, marginBottom: 16, position: 'relative' },
-    avatar: { width: '100%', height: '100%', borderRadius: 50, borderWidth: 3, borderColor: '#FFFFFF', backgroundColor: '#F2F4F7' },
+    // 🟢 UPDATED: Reduced paddingVertical to 8 (was 12) to pull content up
+    header: { paddingVertical: 8, paddingHorizontal: 16, backgroundColor: '#F9FAFB', borderBottomWidth: 1, borderColor: '#EAECF0' },
+    headerRow: { flexDirection: 'row', alignItems: 'center' },
 
-    // 🟢 INITIALS STYLES
+    avatarContainer: { width: 80, height: 80, marginRight: 16, position: 'relative' },
+    avatar: { width: '100%', height: '100%', borderRadius: 40, borderWidth: 2, borderColor: '#FFFFFF', backgroundColor: '#F2F4F7' },
     initialsContainer: { justifyContent: 'center', alignItems: 'center', backgroundColor: '#E4E7EC' },
-    initialsTextBig: { fontSize: 32, fontWeight: '700', color: '#475467' },
+    initialsTextBig: { fontSize: 24, fontWeight: '700', color: '#475467' },
 
-    infoIcon: { position: 'absolute', bottom: 0, right: 0, backgroundColor: '#FFFFFF', borderRadius: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 2 },
-    name: { fontSize: 24, fontWeight: '700', color: '#101828', textAlign: 'center' },
-    category: { color: '#7F56D9', fontSize: 16, fontWeight: '500', marginTop: 4 },
+    infoContainer: { flex: 1, justifyContent: 'center' },
+    name: { fontSize: 22, fontWeight: '700', color: '#101828', marginBottom: 4 },
+
+    metaRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 4 },
+    pill: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, borderWidth: 1, borderColor: '#D0D5DD' },
+    flag: { fontSize: 14, marginRight: 4 },
+    metaText: { fontSize: 13, color: '#344054', fontWeight: '600' },
+
+    eventsText: { fontSize: 14, color: '#667085', fontWeight: '500' },
+    category: { color: '#7F56D9', fontSize: 14, fontWeight: '500' },
+
     content: { flex: 1, paddingHorizontal: 16 },
-    sectionTitle: { fontSize: 18, fontWeight: '600', color: '#101828', marginTop: 20, marginBottom: 12 },
+    // 🟢 TIGHTER MARGINS for Section Title
+    sectionTitle: { fontSize: 18, fontWeight: '600', color: '#101828', marginTop: 12, marginBottom: 8 },
+
     eventCard: { backgroundColor: '#FFFFFF', borderRadius: 12, borderWidth: 1, borderColor: '#EAECF0', marginBottom: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 2 },
     cardHeader: { padding: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#F9FAFB', borderTopLeftRadius: 12, borderTopRightRadius: 12 },
     headerLeft: { flex: 1, marginRight: 10 },
@@ -206,5 +285,14 @@ const styles = StyleSheet.create({
     statsContainer: { padding: 16 },
     statRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
     statLabel: { fontSize: 14, color: '#667085', fontWeight: '500' },
-    statValue: { fontSize: 14, color: '#101828', fontWeight: '600' }
+    statValue: { fontSize: 14, color: '#101828', fontWeight: '600' },
+
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+    modalContent: { width: '100%', alignItems: 'center' },
+    modalImage: { width: 300, height: 300, borderRadius: 12, backgroundColor: '#333' },
+    attributionContainer: { marginTop: 20, backgroundColor: 'white', padding: 16, borderRadius: 12, width: '100%', alignItems: 'center' },
+    attributionTitle: { fontSize: 16, fontWeight: '700', marginBottom: 8 },
+    attributionText: { fontSize: 14, color: '#444', marginBottom: 4 },
+    attributionSource: { fontSize: 14, color: '#666', marginBottom: 8 },
+    linkText: { color: '#7F56D9', fontWeight: '600', fontSize: 14 }
 });

@@ -18,7 +18,6 @@ const DISPLAY_NAMES = {
 
 const HIDDEN_FIELDS = ['id', 'hidden_id', 'event_name_raw', 'athlete_id', 'entity_id', 'event_key'];
 
-// 🟢 HELPER: Get Initials
 const getInitials = (name) => {
     if (!name) return '';
     const parts = name.trim().split(' ');
@@ -139,7 +138,6 @@ export default function HomeScreen() {
             date: item.start_time
         });
 
-        // 🟢 PREPARE AVATAR
         const hasImage = !!item.entities?.image_url;
         const initials = getInitials(item.entities?.name);
 
@@ -148,7 +146,6 @@ export default function HomeScreen() {
                 <View style={styles.cardTop}>
                     <View style={styles.headerLeft}>
                         <TouchableOpacity onPress={goToAthlete}>
-                            {/* 🟢 CONDITIONAL AVATAR */}
                             {hasImage ? (
                                 <Image
                                     source={{ uri: item.entities.image_url }}
@@ -168,11 +165,10 @@ export default function HomeScreen() {
                                 <Text style={styles.athleteName}>{item.entities?.name}</Text>
                             </TouchableOpacity>
 
-                            <TouchableOpacity onPress={goToEvent}>
-                                <Text style={styles.eventMeta}>
-                                    {item.title} • {new Date(item.start_time).toLocaleDateString()}
-                                </Text>
-                            </TouchableOpacity>
+                            {/* 🟢 CHANGE: Removed TouchableOpacity here so text is not clickable */}
+                            <Text style={styles.eventMeta}>
+                                {item.title} • {new Date(item.start_time).toLocaleDateString()}
+                            </Text>
                         </View>
                     </View>
 
@@ -242,8 +238,6 @@ const styles = StyleSheet.create({
     headerRight: { justifyContent: 'center' },
 
     avatarSmall: { width: 40, height: 40, borderRadius: 20, marginRight: 12, backgroundColor: '#F2F4F7' },
-
-    // 🟢 INITIALS STYLES
     initialsContainer: { justifyContent: 'center', alignItems: 'center', backgroundColor: '#E4E7EC' },
     initialsTextSmall: { fontSize: 14, fontWeight: '700', color: '#475467' },
 
